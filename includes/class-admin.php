@@ -34,6 +34,8 @@ class WPATA_Admin {
         if ( $hook !== 'settings_page_wp-accept-to-access' ) {
             return;
         }
+        wp_enqueue_style( 'wp-color-picker' );
+        wp_enqueue_script( 'wp-color-picker' );
         wp_enqueue_style( 'wpata-admin', WPATA_URL . 'assets/css/admin.css', [], WPATA_VERSION );
     }
 
@@ -44,6 +46,7 @@ class WPATA_Admin {
         $clean['cookie_days']     = isset( $input['cookie_days'] ) ? absint( $input['cookie_days'] ) : 30;
         $clean['terms_page_id']   = isset( $input['terms_page_id'] ) ? absint( $input['terms_page_id'] ) : 0;
         $clean['bypass_loggedin'] = ! empty( $input['bypass_loggedin'] ) ? 1 : 0;
+        $clean['button_colour']   = isset( $input['button_colour'] ) ? sanitize_hex_color( wp_unslash( $input['button_colour'] ) ) : '#0073aa';
 
         // Default language fields.
         $clean['title']       = isset( $input['title'] ) ? sanitize_text_field( wp_unslash( $input['title'] ) ) : '';
@@ -72,6 +75,7 @@ class WPATA_Admin {
             'cookie_days'     => 30,
             'terms_page_id'   => 0,
             'bypass_loggedin' => 0,
+            'button_colour'   => '#0073aa',
             'title'           => '',
             'message'         => '',
             'button_text'     => 'Accept',
@@ -131,7 +135,15 @@ class WPATA_Admin {
                                 'option_none_value' => 0,
                             ] );
                             ?>
-                            <p class="description"><?php esc_html_e( 'Visitors can access this page without accepting. Use {terms_link} in your message to insert a link to it.', 'wp-accept-to-access' ); ?></p>
+                            <p class="description"><?php esc_html_e( 'Visitors can access this page without accepting first.', 'wp-accept-to-access' ); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="wpata_button_colour"><?php esc_html_e( 'Button colour', 'wp-accept-to-access' ); ?></label>
+                        </th>
+                        <td>
+                            <input id="wpata_button_colour" type="text" name="<?php echo esc_attr( $this->option_key ); ?>[button_colour]" value="<?php echo esc_attr( $settings['button_colour'] ); ?>" class="wpata-colour-field" data-default-color="#0073aa">
                         </td>
                     </tr>
                 </table>
@@ -181,7 +193,7 @@ class WPATA_Admin {
                                         <td>
                                             <textarea rows="4" class="large-text"
                                                       name="<?php echo esc_attr( $this->option_key . '[message' . $suffix . ']' ); ?>"><?php echo esc_textarea( $msg_val ); ?></textarea>
-                                            <p class="description"><?php esc_html_e( 'Use {terms_link} to insert a link to the Terms & Conditions page. HTML is allowed.', 'wp-accept-to-access' ); ?></p>
+                                            <p class="description"><?php esc_html_e( 'HTML is allowed — write your own links, e.g. &lt;a href="..."&gt;terms&lt;/a&gt;.', 'wp-accept-to-access' ); ?></p>
                                         </td>
                                     </tr>
                                     <tr>
@@ -215,7 +227,7 @@ class WPATA_Admin {
                             <td>
                                 <textarea rows="4" class="large-text"
                                           name="<?php echo esc_attr( $this->option_key ); ?>[message]"><?php echo esc_textarea( $settings['message'] ); ?></textarea>
-                                <p class="description"><?php esc_html_e( 'Use {terms_link} to insert a link to the Terms & Conditions page. HTML is allowed.', 'wp-accept-to-access' ); ?></p>
+                                <p class="description"><?php esc_html_e( 'HTML is allowed — write your own links, e.g. &lt;a href="..."&gt;terms&lt;/a&gt;.', 'wp-accept-to-access' ); ?></p>
                             </td>
                         </tr>
                         <tr>
@@ -234,9 +246,10 @@ class WPATA_Admin {
         </div>
 
         <script>
-        (function() {
-            const links = document.querySelectorAll('.wpata-tab-link');
-            const panels = document.querySelectorAll('.wpata-tab-panel');
+        (function($) {
+            // Language tabs.
+            var links = document.querySelectorAll('.wpata-tab-link');
+            var panels = document.querySelectorAll('.wpata-tab-panel');
 
             links.forEach(function(link) {
                 link.addEventListener('click', function(e) {
@@ -247,7 +260,10 @@ class WPATA_Admin {
                     document.querySelector(link.getAttribute('href')).classList.add('active');
                 });
             });
-        })();
+
+            // Colour picker.
+            $('.wpata-colour-field').wpColorPicker();
+        })(jQuery);
         </script>
         <?php
     }

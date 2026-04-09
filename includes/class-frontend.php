@@ -20,6 +20,7 @@ class WPATA_Frontend {
             'cookie_days'     => 30,
             'terms_page_id'   => 0,
             'bypass_loggedin' => 0,
+            'button_colour'   => '#0073aa',
             'title'           => '',
             'message'         => '',
             'button_text'     => 'Accept',
@@ -96,23 +97,6 @@ class WPATA_Frontend {
             $button_text = $settings['button_text'];
         }
 
-        // Replace {terms_link} placeholder.
-        if ( ! empty( $settings['terms_page_id'] ) ) {
-            $terms_page_id = $settings['terms_page_id'];
-
-            if ( $current_lang ) {
-                $translated_id = apply_filters( 'wpml_object_id', $terms_page_id, 'page', true, $current_lang );
-                if ( $translated_id ) {
-                    $terms_page_id = $translated_id;
-                }
-            }
-
-            $terms_url   = get_permalink( $terms_page_id );
-            $terms_title = get_the_title( $terms_page_id );
-            $terms_link  = '<a href="' . esc_url( $terms_url ) . '" target="_blank" rel="noopener">' . esc_html( $terms_title ) . '</a>';
-            $message     = str_replace( '{terms_link}', $terms_link, $message );
-        }
-
         return [
             'title'       => $title,
             'message'     => $message,
@@ -128,8 +112,10 @@ class WPATA_Frontend {
             return;
         }
 
-        $content  = $this->get_content();
-        $settings = $this->get_settings();
+        $content      = $this->get_content();
+        $settings     = $this->get_settings();
+        $btn_colour   = ! empty( $settings['button_colour'] ) ? $settings['button_colour'] : '#0073aa';
+        $hover_colour = $this->darken_hex( $btn_colour, 20 );
 
         // Prevent caching of the blocked page.
         nocache_headers();
@@ -192,7 +178,7 @@ class WPATA_Frontend {
             font-size: 16px;
             font-weight: 600;
             color: #fff;
-            background: #0073aa;
+            background: <?php echo esc_attr( $btn_colour ); ?>;
             border: none;
             border-radius: 4px;
             cursor: pointer;
@@ -201,7 +187,7 @@ class WPATA_Frontend {
 
         .wpata-popup__button:hover,
         .wpata-popup__button:focus {
-            background: #005177;
+            background: <?php echo esc_attr( $hover_colour ); ?>;
             outline: none;
         }
     </style>
@@ -245,6 +231,17 @@ class WPATA_Frontend {
 </body>
 </html><?php
         exit;
+    }
+
+    /**
+     * Darken a hex colour by a percentage.
+     */
+    private function darken_hex( $hex, $percent ) {
+        $hex = ltrim( $hex, '#' );
+        $r   = max( 0, hexdec( substr( $hex, 0, 2 ) ) - (int) ( 255 * $percent / 100 ) );
+        $g   = max( 0, hexdec( substr( $hex, 2, 2 ) ) - (int) ( 255 * $percent / 100 ) );
+        $b   = max( 0, hexdec( substr( $hex, 4, 2 ) ) - (int) ( 255 * $percent / 100 ) );
+        return sprintf( '#%02x%02x%02x', $r, $g, $b );
     }
 
     /**
