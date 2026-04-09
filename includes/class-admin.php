@@ -46,17 +46,17 @@ class WPATA_Admin {
         $clean['bypass_loggedin'] = ! empty( $input['bypass_loggedin'] ) ? 1 : 0;
 
         // Default language fields.
-        $clean['title']       = isset( $input['title'] ) ? sanitize_text_field( $input['title'] ) : '';
-        $clean['message']     = isset( $input['message'] ) ? wp_kses_post( $input['message'] ) : '';
-        $clean['button_text'] = isset( $input['button_text'] ) ? sanitize_text_field( $input['button_text'] ) : '';
+        $clean['title']       = isset( $input['title'] ) ? sanitize_text_field( wp_unslash( $input['title'] ) ) : '';
+        $clean['message']     = isset( $input['message'] ) ? wp_kses_post( wp_unslash( $input['message'] ) ) : '';
+        $clean['button_text'] = isset( $input['button_text'] ) ? sanitize_text_field( wp_unslash( $input['button_text'] ) ) : '';
 
         // Per-language fields.
         $languages = wpata_get_languages();
         if ( ! empty( $languages ) ) {
             foreach ( $languages as $code => $lang ) {
-                $clean['title_' . $code]       = isset( $input[ 'title_' . $code ] ) ? sanitize_text_field( $input[ 'title_' . $code ] ) : '';
-                $clean['message_' . $code]     = isset( $input[ 'message_' . $code ] ) ? wp_kses_post( $input[ 'message_' . $code ] ) : '';
-                $clean['button_text_' . $code] = isset( $input[ 'button_text_' . $code ] ) ? sanitize_text_field( $input[ 'button_text_' . $code ] ) : '';
+                $clean['title_' . $code]       = isset( $input[ 'title_' . $code ] ) ? sanitize_text_field( wp_unslash( $input[ 'title_' . $code ] ) ) : '';
+                $clean['message_' . $code]     = isset( $input[ 'message_' . $code ] ) ? wp_kses_post( wp_unslash( $input[ 'message_' . $code ] ) ) : '';
+                $clean['button_text_' . $code] = isset( $input[ 'button_text_' . $code ] ) ? sanitize_text_field( wp_unslash( $input[ 'button_text_' . $code ] ) ) : '';
             }
         }
 

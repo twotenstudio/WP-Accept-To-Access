@@ -9,15 +9,11 @@ class WPATA_Frontend {
     private $option_key = 'wpata_settings';
 
     public function __construct() {
-        add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
-        add_action( 'wp_footer', [ $this, 'render_popup' ] );
+        add_action( 'template_redirect', [ $this, 'maybe_block' ] );
         add_action( 'wp_ajax_wpata_accept', [ $this, 'handle_accept' ] );
         add_action( 'wp_ajax_nopriv_wpata_accept', [ $this, 'handle_accept' ] );
     }
 
-    /**
-     * Get saved settings.
-     */
     private function get_settings() {
         $defaults = [
             'enabled'         => 0,
@@ -32,40 +28,40 @@ class WPATA_Frontend {
     }
 
     /**
-     * Should the popup be shown to the current visitor?
+     * Should the current request be blocked?
      */
-    private function should_show() {
+    private function should_block() {
         $settings = $this->get_settings();
 
         if ( empty( $settings['enabled'] ) ) {
             return false;
         }
 
-        // Bypass for logged-in users if configured.
         if ( ! empty( $settings['bypass_loggedin'] ) && is_user_logged_in() ) {
             return false;
         }
 
-        // Don't show on the admin side.
-        if ( is_admin() ) {
+        // Never block admin, AJAX, REST, cron, or CLI.
+        if ( is_admin() || wp_doing_ajax() || wp_doing_cron() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
             return false;
         }
 
-        // Don't block the T&C page itself.
-        if ( ! empty( $settings['terms_page_id'] ) && is_page( $settings['terms_page_id'] ) ) {
-            return false;
-        }
-
-        // Check for WPML-translated T&C page.
+        // Don't block the T&C page itself (or its WPML translations).
         if ( ! empty( $settings['terms_page_id'] ) ) {
-            $current_lang  = wpata_get_current_language();
-            $translated_id = apply_filters( 'wpml_object_id', $settings['terms_page_id'], 'page', false, $current_lang );
-            if ( $translated_id && is_page( $translated_id ) ) {
+            if ( is_page( $settings['terms_page_id'] ) ) {
                 return false;
+            }
+
+            $current_lang = wpata_get_current_language();
+            if ( $current_lang ) {
+                $translated_id = apply_filters( 'wpml_object_id', $settings['terms_page_id'], 'page', false, $current_lang );
+                if ( $translated_id && is_page( $translated_id ) ) {
+                    return false;
+                }
             }
         }
 
-        // Already accepted (cookie check).
+        // Already accepted.
         if ( ! empty( $_COOKIE['wpata_accepted'] ) ) {
             return false;
         }
@@ -82,7 +78,6 @@ class WPATA_Frontend {
         $current_lang = wpata_get_current_language();
         $default_lang = wpata_get_default_language();
 
-        // If WPML is active, try the current language fields first, then fall back to default.
         if ( ! empty( $languages ) && $current_lang ) {
             $title = ! empty( $settings[ 'title_' . $current_lang ] )
                 ? $settings[ 'title_' . $current_lang ]
@@ -101,11 +96,10 @@ class WPATA_Frontend {
             $button_text = $settings['button_text'];
         }
 
-        // Replace {terms_link} placeholder with actual link.
+        // Replace {terms_link} placeholder.
         if ( ! empty( $settings['terms_page_id'] ) ) {
             $terms_page_id = $settings['terms_page_id'];
 
-            // Get translated T&C page if WPML is active.
             if ( $current_lang ) {
                 $translated_id = apply_filters( 'wpml_object_id', $terms_page_id, 'page', true, $current_lang );
                 if ( $translated_id ) {
@@ -126,50 +120,135 @@ class WPATA_Frontend {
         ];
     }
 
-    public function enqueue_assets() {
-        if ( ! $this->should_show() ) {
+    /**
+     * Intercept the request and serve the acceptance page instead.
+     */
+    public function maybe_block() {
+        if ( ! $this->should_block() ) {
             return;
         }
 
-        wp_enqueue_style( 'wpata-popup', WPATA_URL . 'assets/css/popup.css', [], WPATA_VERSION );
-        wp_enqueue_script( 'wpata-popup', WPATA_URL . 'assets/js/popup.js', [], WPATA_VERSION, true );
-
+        $content  = $this->get_content();
         $settings = $this->get_settings();
 
-        wp_localize_script( 'wpata-popup', 'wpata', [
-            'ajaxUrl'    => admin_url( 'admin-ajax.php' ),
-            'nonce'      => wp_create_nonce( 'wpata_accept' ),
-            'cookieDays' => (int) $settings['cookie_days'],
-        ] );
-    }
+        // Prevent caching of the blocked page.
+        nocache_headers();
 
-    public function render_popup() {
-        if ( ! $this->should_show() ) {
-            return;
+        ?><!DOCTYPE html>
+<html <?php language_attributes(); ?>>
+<head>
+    <meta charset="<?php bloginfo( 'charset' ); ?>">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><?php echo esc_html( $content['title'] ?: get_bloginfo( 'name' ) ); ?></title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: #f0f0f0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+            color: #1a1a1a;
         }
 
-        $content = $this->get_content();
-        ?>
-        <div id="wpata-overlay" role="dialog" aria-modal="true" aria-labelledby="wpata-title">
-            <div class="wpata-popup">
-                <?php if ( ! empty( $content['title'] ) ) : ?>
-                    <h2 id="wpata-title" class="wpata-popup__title"><?php echo esc_html( $content['title'] ); ?></h2>
-                <?php endif; ?>
+        .wpata-popup {
+            background: #fff;
+            border-radius: 8px;
+            padding: 48px 40px;
+            max-width: 520px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+        }
 
-                <?php if ( ! empty( $content['message'] ) ) : ?>
-                    <div class="wpata-popup__message"><?php echo wp_kses_post( $content['message'] ); ?></div>
-                <?php endif; ?>
+        .wpata-popup__title {
+            margin: 0 0 16px;
+            font-size: 24px;
+            font-weight: 700;
+            line-height: 1.3;
+        }
 
-                <button id="wpata-accept" class="wpata-popup__button" type="button">
-                    <?php echo esc_html( $content['button_text'] ); ?>
-                </button>
-            </div>
-        </div>
-        <?php
+        .wpata-popup__message {
+            margin: 0 0 28px;
+            font-size: 15px;
+            line-height: 1.6;
+            color: #444;
+        }
+
+        .wpata-popup__message a {
+            color: #0073aa;
+            text-decoration: underline;
+        }
+
+        .wpata-popup__message a:hover {
+            color: #005177;
+        }
+
+        .wpata-popup__button {
+            display: inline-block;
+            padding: 12px 40px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #fff;
+            background: #0073aa;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .wpata-popup__button:hover,
+        .wpata-popup__button:focus {
+            background: #005177;
+            outline: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="wpata-popup" role="dialog" aria-modal="true" aria-labelledby="wpata-title">
+        <?php if ( ! empty( $content['title'] ) ) : ?>
+            <h2 id="wpata-title" class="wpata-popup__title"><?php echo esc_html( $content['title'] ); ?></h2>
+        <?php endif; ?>
+
+        <?php if ( ! empty( $content['message'] ) ) : ?>
+            <div class="wpata-popup__message"><?php echo wp_kses_post( $content['message'] ); ?></div>
+        <?php endif; ?>
+
+        <button id="wpata-accept" class="wpata-popup__button" type="button">
+            <?php echo esc_html( $content['button_text'] ); ?>
+        </button>
+    </div>
+
+    <script>
+    (function () {
+        var btn = document.getElementById('wpata-accept');
+        if (!btn) return;
+
+        btn.addEventListener('click', function () {
+            var days    = <?php echo (int) $settings['cookie_days']; ?>;
+            var expires = new Date(Date.now() + days * 86400000).toUTCString();
+            document.cookie = 'wpata_accepted=1;expires=' + expires + ';path=/;SameSite=Lax<?php echo is_ssl() ? ';Secure' : ''; ?>';
+
+            // Also set server-side cookie via AJAX.
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '<?php echo esc_js( admin_url( 'admin-ajax.php' ) ); ?>');
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.send('action=wpata_accept&nonce=<?php echo esc_js( wp_create_nonce( 'wpata_accept' ) ); ?>');
+
+            // Reload the current page — this time the cookie exists so content will load.
+            window.location.reload();
+        });
+    })();
+    </script>
+</body>
+</html><?php
+        exit;
     }
 
     /**
-     * AJAX handler — sets the cookie server-side as well.
+     * AJAX handler — sets the cookie server-side.
      */
     public function handle_accept() {
         check_ajax_referer( 'wpata_accept', 'nonce' );
