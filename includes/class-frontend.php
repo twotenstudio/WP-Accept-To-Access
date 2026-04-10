@@ -10,8 +10,6 @@ class WPATA_Frontend {
 
     public function __construct() {
         add_action( 'template_redirect', [ $this, 'maybe_block' ] );
-        add_action( 'wp_ajax_wpata_accept', [ $this, 'handle_accept' ] );
-        add_action( 'wp_ajax_nopriv_wpata_accept', [ $this, 'handle_accept' ] );
     }
 
     private function get_settings() {
@@ -215,16 +213,10 @@ class WPATA_Frontend {
         btn.addEventListener('click', function () {
             var days    = <?php echo (int) $settings['cookie_days']; ?>;
             var expires = new Date(Date.now() + days * 86400000).toUTCString();
-            document.cookie = 'wpata_accepted=1;expires=' + expires + ';path=/;SameSite=Lax<?php echo is_ssl() ? ';Secure' : ''; ?>';
+            document.cookie = 'wpata_accepted=1;expires=' + expires + ';path=<?php echo esc_js( COOKIEPATH ); ?>;SameSite=Lax<?php echo is_ssl() ? ';Secure' : ''; ?>';
 
-            // Also set server-side cookie via AJAX.
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', '<?php echo esc_js( admin_url( 'admin-ajax.php' ) ); ?>');
-            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-            xhr.send('action=wpata_accept&nonce=<?php echo esc_js( wp_create_nonce( 'wpata_accept' ) ); ?>');
-
-            // Reload the current page — this time the cookie exists so content will load.
-            window.location.reload();
+            // Redirect (not reload) to bust any cached blocked page.
+            window.location.href = window.location.href;
         });
     })();
     </script>
@@ -244,17 +236,4 @@ class WPATA_Frontend {
         return sprintf( '#%02x%02x%02x', $r, $g, $b );
     }
 
-    /**
-     * AJAX handler — sets the cookie server-side.
-     */
-    public function handle_accept() {
-        check_ajax_referer( 'wpata_accept', 'nonce' );
-
-        $settings = $this->get_settings();
-        $days     = max( 1, (int) $settings['cookie_days'] );
-
-        setcookie( 'wpata_accepted', '1', time() + ( $days * DAY_IN_SECONDS ), COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
-
-        wp_send_json_success();
-    }
 }
