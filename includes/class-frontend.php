@@ -9,7 +9,27 @@ class WPATA_Frontend {
     private $option_key = 'wpata_settings';
 
     public function __construct() {
+        add_action( 'template_redirect', [ $this, 'handle_accept' ], 5 );
         add_action( 'template_redirect', [ $this, 'maybe_block' ] );
+    }
+
+    /**
+     * Handle the accept form POST — runs before maybe_block so the
+     * cookie is set before we decide whether to block.
+     */
+    public function handle_accept() {
+        if ( empty( $_POST['wpata_accept'] ) || ! wp_verify_nonce( $_POST['_wpata_nonce'], 'wpata_accept' ) ) {
+            return;
+        }
+
+        $settings = $this->get_settings();
+        $days     = max( 1, (int) $settings['cookie_days'] );
+
+        setcookie( 'wpata_accepted', '1', time() + ( $days * DAY_IN_SECONDS ), '/', '', is_ssl(), false );
+
+        // Redirect back to the same page (GET) to avoid form resubmission.
+        wp_safe_redirect( remove_query_arg( '_wpata', wp_unslash( $_SERVER['REQUEST_URI'] ) ) );
+        exit;
     }
 
     private function get_settings() {
@@ -200,29 +220,14 @@ class WPATA_Frontend {
             <div class="wpata-popup__message"><?php echo wp_kses_post( $content['message'] ); ?></div>
         <?php endif; ?>
 
-        <button id="wpata-accept" class="wpata-popup__button" type="button">
-            <?php echo esc_html( $content['button_text'] ); ?>
-        </button>
+        <form method="post">
+            <?php wp_nonce_field( 'wpata_accept', '_wpata_nonce' ); ?>
+            <input type="hidden" name="wpata_accept" value="1">
+            <button class="wpata-popup__button" type="submit">
+                <?php echo esc_html( $content['button_text'] ); ?>
+            </button>
+        </form>
     </div>
-
-    <script>
-    (function () {
-        var btn = document.getElementById('wpata-accept');
-        if (!btn) return;
-
-        btn.addEventListener('click', function () {
-            var days    = <?php echo (int) $settings['cookie_days']; ?>;
-            var expires = new Date(Date.now() + days * 86400000).toUTCString();
-            var secure  = window.location.protocol === 'https:' ? ';Secure' : '';
-            document.cookie = 'wpata_accepted=1; expires=' + expires + '; path=<?php echo esc_js( COOKIEPATH ); ?>; SameSite=Lax' + secure;
-
-            // Force a real server request by adding a cache-buster.
-            var url = window.location.href.split('#')[0];
-            var sep = url.indexOf('?') === -1 ? '?' : '&';
-            window.location.replace(url + sep + '_wpata=' + Date.now());
-        });
-    })();
-    </script>
 </body>
 </html><?php
         exit;
