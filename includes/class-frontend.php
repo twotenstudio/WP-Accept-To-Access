@@ -213,10 +213,13 @@ class WPATA_Frontend {
         btn.addEventListener('click', function () {
             var days    = <?php echo (int) $settings['cookie_days']; ?>;
             var expires = new Date(Date.now() + days * 86400000).toUTCString();
-            document.cookie = 'wpata_accepted=1;expires=' + expires + ';path=<?php echo esc_js( COOKIEPATH ); ?>;SameSite=Lax<?php echo is_ssl() ? ';Secure' : ''; ?>';
+            var secure  = window.location.protocol === 'https:' ? ';Secure' : '';
+            document.cookie = 'wpata_accepted=1; expires=' + expires + '; path=<?php echo esc_js( COOKIEPATH ); ?>; SameSite=Lax' + secure;
 
-            // Redirect (not reload) to bust any cached blocked page.
-            window.location.href = window.location.href;
+            // Force a real server request by adding a cache-buster.
+            var url = window.location.href.split('#')[0];
+            var sep = url.indexOf('?') === -1 ? '?' : '&';
+            window.location.replace(url + sep + '_wpata=' + Date.now());
         });
     })();
     </script>
